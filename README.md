@@ -27,6 +27,13 @@
   тот же контракт в формате OpenAPI 3.0 (для `/docs` и кодогенерации).
 - [docs/diagrams/](docs/diagrams/) — компонентная, две потоковых (happy path, 500) и
   ER-диаграмма SQLite в формате PlantUML.
+- [docs/architecture-decisions.md](docs/architecture-decisions.md) — сравнение
+  альтернатив (ORM vs сырой SQL, алгоритм сопоставления жалобы) и список открытых
+  вопросов, которые реестр задач не закрывает.
+
+Ветка [`feature/sqlalchemy-data-layer`](https://github.com/P0dp1vass/sim_race/tree/feature/sqlalchemy-data-layer)
+демонстрирует слой данных на SQLAlchemy ORM как альтернативу сырым `sqlite3`-запросам
+(см. ADR 1 в `architecture-decisions.md`).
 
 ## Стек MVP
 

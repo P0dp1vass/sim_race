@@ -36,6 +36,8 @@ Backlog на уровне эпиков называет четыре смысл�
 
 Диаграммы компонентов и потоков — в [`diagrams/`](diagrams/), машиночитаемый контракт
 API — в [`openapi/setup-recommendation-service.yaml`](openapi/setup-recommendation-service.yaml).
+Сравнение с альтернативными вариантами (ORM, алгоритм сопоставления и открытые
+вопросы) — в [`architecture-decisions.md`](architecture-decisions.md).
 
 ## Компоненты и границы
 
