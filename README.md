@@ -9,22 +9,33 @@
 
 | Папка | Что внутри |
 |---|---|
-| [`docs/`](docs/) | Техническая документация MVP: архитектура, контракт API |
+| [`docs/`](docs/) | Техническая документация MVP: архитектура, контракт API, диаграммы |
+| [`docs/openapi/`](docs/openapi/) | Машиночитаемый контракт API (OpenAPI 3.0) |
+| [`docs/diagrams/`](docs/diagrams/) | Диаграммы компонентов, потоков и данных (PlantUML) |
 | [`research/`](research/) | Исследование ниши симрейсинга (боли, спрос, пилотаж vs сетап) |
 | [`planning/`](planning/) | Реестр задач спринта |
+| [`assets/board-screenshots/`](assets/board-screenshots/) | Скриншоты доски проекта (цель, бэклог, roadmap) |
 
 ## Документация MVP
 
-- [docs/architecture.md](docs/architecture.md) — границы frontend/FastAPI backend/SQLite,
-  поток данных, ответственность компонентов.
+- [docs/architecture.md](docs/architecture.md) — выделение сервисов, границы
+  frontend/Setup Recommendation Service/SQLite, поток данных, ответственность
+  компонентов, ссылки на диаграммы.
 - [docs/api-contract.md](docs/api-contract.md) — контракт `GET /health` и
   `POST /api/v1/recommendations`: поля запроса/ответа, ошибки, отсутствие совпадения.
+- [docs/openapi/setup-recommendation-service.yaml](docs/openapi/setup-recommendation-service.yaml) —
+  тот же контракт в формате OpenAPI 3.0 (для `/docs` и кодогенерации).
+- [docs/diagrams/](docs/diagrams/) — компонентная, две потоковых (happy path, 500) и
+  ER-диаграмма SQLite в формате PlantUML.
 
 ## Стек MVP
 
-- Frontend — веб-форма ввода жалобы и отображения рекомендации.
-- Backend — FastAPI, единый endpoint рекомендаций + health-check.
+- Frontend — веб-форма ввода жалобы и отображения рекомендации (клиент, без своего API).
+- Setup Recommendation Service — FastAPI, единый endpoint рекомендаций + health-check.
 - Хранилище — SQLite: параметры сетапа и экспертные правила.
+
+MVP — один backend-сервис, не микросервисная архитектура (обоснование — в
+`docs/architecture.md`, раздел «Выделение сервисов»).
 
 MVP работает для одного заранее выбранного автомобиля и овальных трасс iRacing;
 рекомендации — только по проверенным экспертным правилам, без генерации произвольных

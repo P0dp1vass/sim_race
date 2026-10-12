@@ -1,0 +1,224 @@
+openapi: 3.0.3
+info:
+  title: Setup Recommendation Service API
+  version: 0.1.0
+  description: |
+    # Setup Recommendation Service
+    Единственный backend-сервис MVP «AI Assistant for Simracing Setups»: принимает
+    жалобу пилота на поведение машины, сопоставляет её с базой экспертных правил
+    и возвращает проверяемую рекомендацию по изменению параметра сетапа.
+
+    ### Основные функции
+    * **Приём жалобы:** свободный текст жалобы пилота на поведение машины.
+    * **Поиск правил:** сопоставление жалобы с условиями экспертных правил, разрешённых
+      к выдаче (непроверенные правила исключаются до сравнения).
+    * **Рекомендации:** параметр, направление изменения, ожидаемый эффект, ограничения.
+    * **Health-check:** проверка работоспособности сервиса.
+
+    ### Границы MVP
+    * Один заранее выбранный автомобиль, овальные трассы iRacing (FED-02).
+    * Без аутентификации и профилей пользователей.
+    * Без ML/LLM — только детерминированный поиск по проверенным правилам
+      (граница с возможным ML/LLM-слоем — задача KIR-03).
+    * Сопоставление жалобы с правилом — поиск по ключевым словам/подстрокам в условии
+      правила, не семантический NLP-анализ.
+
+    Владеет данными в SQLite (таблицы `parameters` и `rules`, см. `../architecture.md`).
+  contact:
+    name: Кирилл Дмитриев
+    email: kirdmitriev2908@gmail.com
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server (ROD-01)
+
+tags:
+  - name: Health
+    description: Проверка работоспособности сервиса
+  - name: Recommendations
+    description: Поиск рекомендаций по жалобе пилота на основе экспертных правил
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Проверка работоспособности сервиса
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/recommendations:
+    post:
+      tags: [Recommendations]
+      summary: Получить рекомендации по жалобе пилота
+      description: |
+        Валидирует запрос, ищет среди разрешённых к выдаче экспертных правил те,
+        условие которых соответствует жалобе, и возвращает совпадение либо `no_match`.
+        Никогда не возвращает правило со статусом, отличным от «разрешено к выдаче»
+        (см. FED-05).
+      operationId: createRecommendation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationRequest'
+            examples:
+              oversteerOnExit:
+                summary: Избыточная поворачиваемость на выходе из поворота
+                value:
+                  symptom: "на выходе из поворота машину уводит в избыточную поворачиваемость"
+      responses:
+        '200':
+          description: Запрос обработан — совпадение найдено либо нет
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/MatchResponse'
+                  - $ref: '#/components/schemas/NoMatchResponse'
+              examples:
+                match:
+                  summary: Найдено совпадение
+                  value:
+                    status: match
+                    recommendations:
+                      - rule_id: "R-001"
+                        parameter: "давление задних шин"
+                        direction: decrease
+                        change_description: "Снизить давление в задних шинах на 1–2 psi"
+                        expected_effect: "Увеличение пятна контакта задней оси, снижение избыточной поворачиваемости на выходе из поворота"
+                        limitations: "Не снижать ниже рекомендованного производителем минимума"
+                        basis: "VAR-01 / проверено FED-05"
+                no_match:
+                  summary: Совпадений нет
+                  value:
+                    status: no_match
+                    message: "Подходящее правило не найдено. Попробуйте описать жалобу точнее."
+        '400':
+          description: Ошибка валидации запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                error:
+                  code: validation_error
+                  message: "Поле symptom обязательно и должно содержать от 3 до 500 символов"
+                  fields:
+                    symptom: "обязательное поле"
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                error:
+                  code: internal_error
+                  message: "Внутренняя ошибка сервера, попробуйте повторить запрос позже"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    RecommendationRequest:
+      type: object
+      required: [symptom]
+      properties:
+        symptom:
+          type: string
+          minLength: 3
+          maxLength: 500
+          description: >
+            Жалоба пилота на поведение машины в свободной форме. Участок трассы и фаза
+            поворота указываются внутри текста, отдельного поля под них в MVP нет.
+          example: "на выходе из поворота машину уводит в избыточную поворачиваемость"
+
+    Recommendation:
+      type: object
+      required: [rule_id, parameter, direction, change_description, expected_effect]
+      properties:
+        rule_id:
+          type: string
+          description: Идентификатор правила, трассируется до таблицы `rules` в SQLite.
+          example: "R-001"
+        parameter:
+          type: string
+          description: Каноническое имя параметра сетапа (единый словарь, VAR-02).
+          example: "давление задних шин"
+        direction:
+          type: string
+          enum: [increase, decrease]
+        change_description:
+          type: string
+          example: "Снизить давление в задних шинах на 1–2 psi"
+        expected_effect:
+          type: string
+        limitations:
+          type: string
+          nullable: true
+        basis:
+          type: string
+          nullable: true
+          description: Источник/основание правила (каталог источников — VAR-01).
+
+    MatchResponse:
+      type: object
+      required: [status, recommendations]
+      properties:
+        status:
+          type: string
+          enum: [match]
+        recommendations:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Recommendation'
+
+    NoMatchResponse:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [no_match]
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [status, error]
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [validation_error, internal_error]
+            message:
+              type: string
+            fields:
+              type: object
+              additionalProperties:
+                type: string
+              nullable: true

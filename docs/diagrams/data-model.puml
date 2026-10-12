@@ -1,0 +1,34 @@
+@startuml data-model
+title Схема данных SQLite — parameters и rules
+
+entity "parameters" as parameters {
+  * id : integer <<PK>>
+  --
+  name : string
+  unit : string
+  influence_description : string
+  limitations : string
+}
+
+entity "rules" as rules {
+  * id : integer <<PK>>
+  --
+  symptom_condition : string
+  * parameter_id : integer <<FK>>
+  direction : string
+  effect : string
+  limitations : string
+  applicability : string
+  status : string
+  basis : string
+}
+
+rules }o--|| parameters : parameter_id
+
+note bottom of rules
+  status определяет, попадёт ли
+  правило в выборку backend —
+  см. FED-05 и api-contract.md.
+end note
+
+@enduml

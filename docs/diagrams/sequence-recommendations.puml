@@ -1,0 +1,37 @@
+@startuml sequence-recommendations
+title Поток "жалоба → рекомендация" (POST /api/v1/recommendations)
+
+actor "Пилот" as pilot
+participant "Frontend" as fe
+participant "Setup Recommendation\nService (FastAPI)" as svc
+database "SQLite" as db
+
+pilot -> fe : вводит жалобу
+fe -> svc : POST /api/v1/recommendations\n{symptom}
+activate svc
+
+svc -> svc : валидация запроса\n(3–500 символов)
+
+alt запрос невалиден
+    svc --> fe : 400 {status: error,\nerror.code: validation_error}
+    fe --> pilot : показывает ошибку валидации
+else запрос валиден
+    svc -> db : SELECT rules\nWHERE status = allowed
+    activate db
+    db --> svc : разрешённые правила
+    deactivate db
+
+    svc -> svc : сопоставление symptom\nс условиями правил
+
+    alt совпадение найдено
+        svc --> fe : 200 {status: match,\nrecommendations: [...]}
+        fe --> pilot : показывает рекомендации\n(параметр, направление, эффект, ограничения)
+    else совпадений нет
+        svc --> fe : 200 {status: no_match,\nmessage: "..."}
+        fe --> pilot : "подходящее правило не найдено"
+    end
+end
+
+deactivate svc
+
+@enduml

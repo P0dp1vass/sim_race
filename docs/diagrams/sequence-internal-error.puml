@@ -1,0 +1,22 @@
+@startuml sequence-internal-error
+title Поток внутренней ошибки (500)
+
+actor "Пилот" as pilot
+participant "Frontend" as fe
+participant "Setup Recommendation\nService (FastAPI)" as svc
+database "SQLite" as db
+
+pilot -> fe : вводит корректную жалобу
+fe -> svc : POST /api/v1/recommendations\n{symptom}
+activate svc
+
+svc -> db : SELECT rules WHERE status = allowed
+activate db
+db --> svc : необработанное исключение\n(например, база недоступна)
+deactivate db
+
+svc --> fe : 500 {status: error,\nerror.code: internal_error}
+deactivate svc
+fe --> pilot : "внутренняя ошибка,\nпопробуйте повторить запрос позже"
+
+@enduml

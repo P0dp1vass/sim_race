@@ -1,0 +1,44 @@
+@startuml component
+title AI Assistant for Simracing Setups — компоненты MVP (спринт 1)
+
+actor "Пилот" as pilot
+
+package "Frontend (клиент)" {
+  [Форма ввода жалобы] as form
+  [Компонент рекомендации] as recoView
+}
+
+package "Setup Recommendation Service (FastAPI)" {
+  [API-слой\nвалидация запроса / ответ] as api
+  [Движок сопоставления правил] as engine
+}
+
+database "SQLite" as db {
+  [parameters]
+  [rules]
+}
+
+pilot --> form : вводит жалобу на\nповедение машины
+form --> api : POST /api/v1/recommendations\n{symptom}
+api --> engine : валидный запрос
+engine --> db : SELECT rules\nWHERE status = allowed
+db --> engine : совпадающие правила
+engine --> api : рекомендации\nлибо "нет совпадения"
+api --> recoView : 200 JSON
+recoView --> pilot : показывает рекомендацию\nили сообщение
+
+note right of db
+  Единственный источник истины.
+  Setup Recommendation Service
+  только читает.
+  Непроверенные правила
+  исключаются до сравнения (FED-05).
+end note
+
+note bottom of engine
+  MVP: поиск по ключевым словам
+  в условии правила, без NLP/ML
+  (граница зафиксирована в KIR-03).
+end note
+
+@enduml
