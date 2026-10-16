@@ -31,6 +31,8 @@
 - [docs/ml-llm-boundary.md](docs/ml-llm-boundary.md) — граница между экспертными
   правилами и ML/LLM (KIR-03): что в MVP, что осталось за бортом и почему это пробел
   данных, а не повод добавлять модель.
+- [docs/quality-metrics.md](docs/quality-metrics.md) — метрики качества рекомендаций
+  и порядок фиксации теста (KIR-04).
 - [docs/diagrams/](docs/diagrams/) — компонентная, две потоковых и ER-диаграмма SQLite
   (`parameters`, `rules`, `requests`, `feedback`) в формате PlantUML.
 - [docs/architecture-decisions.md](docs/architecture-decisions.md) — обоснование
