@@ -1,33 +1,38 @@
 @startuml sequence-recommendations
-title Поток "жалоба → рекомендация" (POST /api/v1/recommendations)
+title Поток "жалоба → рекомендация" (POST /api/v1/recommendations, v2)
 
 actor "Пилот" as pilot
 participant "Frontend" as fe
 participant "Setup Recommendation\nService (FastAPI)" as svc
 database "SQLite" as db
 
-pilot -> fe : вводит жалобу
-fe -> svc : POST /api/v1/recommendations\n{symptom}
+pilot -> fe : выбирает car/track/symptom_type/\ncorner_phase/stint_moment,\nпишет comment
+fe -> svc : POST /api/v1/recommendations\n{car, track, symptom_type,\ncorner_phase, stint_moment?, comment}
 activate svc
 
-svc -> svc : валидация запроса\n(3–500 символов)
+svc -> svc : валидация запроса\n(обязательные поля, comment 3–500)
 
 alt запрос невалиден
     svc --> fe : 400 {status: error,\nerror.code: validation_error}
-    fe --> pilot : показывает ошибку валидации
+    fe --> pilot : показывает ошибку у полей (error.fields)
 else запрос валиден
     svc -> db : SELECT rules\nWHERE status = allowed
     activate db
     db --> svc : разрешённые правила
     deactivate db
 
-    svc -> svc : сопоставление symptom\nс условиями правил
+    svc -> svc : точное совпадение symptom_type/\ncorner_phase/stint_moment,\ncar/track ∈ applicability
+
+    svc -> db : INSERT requests\n(запрос + исход)
+    activate db
+    db --> svc : ok
+    deactivate db
 
     alt совпадение найдено
-        svc --> fe : 200 {status: match,\nrecommendations: [...]}
-        fe --> pilot : показывает рекомендации\n(параметр, направление, эффект, ограничения)
+        svc --> fe : 200 {status: match, request_id,\nrecommendations: [...] (≤3)}
+        fe --> pilot : показывает карточки рекомендаций
     else совпадений нет
-        svc --> fe : 200 {status: no_match,\nmessage: "..."}
+        svc --> fe : 200 {status: no_match, request_id,\nmessage: "..."}
         fe --> pilot : "подходящее правило не найдено"
     end
 end

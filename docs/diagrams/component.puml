@@ -1,11 +1,12 @@
 @startuml component
-title AI Assistant for Simracing Setups — компоненты MVP (спринт 1)
+title AI Assistant for Simracing Setups — компоненты MVP (v2, 16.10.2026)
 
 actor "Пилот" as pilot
 
 package "Frontend (клиент)" {
-  [Форма ввода жалобы] as form
-  [Компонент рекомендации] as recoView
+  [Форма запроса\n(6 полей)] as form
+  [Компонент рекомендации\n+ ссылка на отзыв] as recoView
+  [Форма отзыва] as feedbackForm
 }
 
 package "Setup Recommendation Service (FastAPI)" {
@@ -16,29 +17,37 @@ package "Setup Recommendation Service (FastAPI)" {
 database "SQLite" as db {
   [parameters]
   [rules]
+  [requests]
+  [feedback]
 }
 
-pilot --> form : вводит жалобу на\nповедение машины
-form --> api : POST /api/v1/recommendations\n{symptom}
+pilot --> form : выбирает car/track/symptom_type/\ncorner_phase/stint_moment, пишет comment
+form --> api : POST /api/v1/recommendations
 api --> engine : валидный запрос
-engine --> db : SELECT rules\nWHERE status = allowed
+engine --> db : SELECT rules WHERE status = allowed
 db --> engine : совпадающие правила
-engine --> api : рекомендации\nлибо "нет совпадения"
-api --> recoView : 200 JSON
+engine --> db : INSERT requests
+api --> recoView : 200 {request_id, match | no_match}
 recoView --> pilot : показывает рекомендацию\nили сообщение
+
+pilot --> feedbackForm : после заезда оценивает совет
+feedbackForm --> api : POST /api/v1/feedback\n{request_id, rule_id, ...}
+api --> db : INSERT feedback
 
 note right of db
   Единственный источник истины.
   Setup Recommendation Service
-  только читает.
+  читает parameters/rules,
+  пишет requests/feedback.
   Непроверенные правила
   исключаются до сравнения (FED-05).
 end note
 
 note bottom of engine
-  MVP: поиск по ключевым словам
-  в условии правила, без NLP/ML
-  (граница зафиксирована в KIR-03).
+  MVP: точное совпадение структурированных
+  полей (symptom_type, corner_phase,
+  stint_moment, applicability), без NLP/ML.
+  Граница — ml-llm-boundary.md (KIR-03).
 end note
 
 @enduml

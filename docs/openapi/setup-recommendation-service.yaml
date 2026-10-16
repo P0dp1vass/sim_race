@@ -1,29 +1,32 @@
 openapi: 3.0.3
 info:
   title: Setup Recommendation Service API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     # Setup Recommendation Service
-    Единственный backend-сервис MVP «AI Assistant for Simracing Setups»: принимает
-    жалобу пилота на поведение машины, сопоставляет её с базой экспертных правил
-    и возвращает проверяемую рекомендацию по изменению параметра сетапа.
+    Единственный backend-сервис MVP «AI Assistant for Simracing Setups». Версия 2
+    (16.10.2026, переносит решения ALE-03 v2 / 15.10): запрос рекомендации
+    структурирован (6 полей), добавлены `GET /api/v1/recommendations/{request_id}`
+    и `POST /api/v1/feedback`.
 
     ### Основные функции
-    * **Приём жалобы:** свободный текст жалобы пилота на поведение машины.
-    * **Поиск правил:** сопоставление жалобы с условиями экспертных правил, разрешённых
+    * **Приём жалобы:** структурированные `car`, `track`, `symptom_type`,
+      `corner_phase`, необязательный `stint_moment`, обязательный `comment`.
+    * **Поиск правил:** точное совпадение значений с условиями правил, разрешённых
       к выдаче (непроверенные правила исключаются до сравнения).
-    * **Рекомендации:** параметр, направление изменения, ожидаемый эффект, ограничения.
+    * **Повторный просмотр:** `GET /api/v1/recommendations/{request_id}`.
+    * **Обратная связь:** `POST /api/v1/feedback` — результат применения рекомендации.
     * **Health-check:** проверка работоспособности сервиса.
 
     ### Границы MVP
     * Один заранее выбранный автомобиль, овальные трассы iRacing (FED-02).
     * Без аутентификации и профилей пользователей.
     * Без ML/LLM — только детерминированный поиск по проверенным правилам
-      (граница с возможным ML/LLM-слоем — задача KIR-03).
-    * Сопоставление жалобы с правилом — поиск по ключевым словам/подстрокам в условии
-      правила, не семантический NLP-анализ.
+      (граница — `../ml-llm-boundary.md`, KIR-03).
+    * `comment` не участвует в поиске, только сохраняется для анализа.
 
-    Владеет данными в SQLite (таблицы `parameters` и `rules`, см. `../architecture.md`).
+    Владеет данными в SQLite (таблицы `parameters`, `rules`, `requests`, `feedback`,
+    см. `../architecture.md`).
   contact:
     name: Кирилл Дмитриев
     email: kirdmitriev2908@gmail.com
@@ -36,7 +39,9 @@ tags:
   - name: Health
     description: Проверка работоспособности сервиса
   - name: Recommendations
-    description: Поиск рекомендаций по жалобе пилота на основе экспертных правил
+    description: Поиск и повторный просмотр рекомендаций
+  - name: Feedback
+    description: Отзыв пилота о применённой рекомендации
 
 paths:
   /health:
@@ -58,10 +63,11 @@ paths:
       tags: [Recommendations]
       summary: Получить рекомендации по жалобе пилота
       description: |
-        Валидирует запрос, ищет среди разрешённых к выдаче экспертных правил те,
-        условие которых соответствует жалобе, и возвращает совпадение либо `no_match`.
-        Никогда не возвращает правило со статусом, отличным от «разрешено к выдаче»
-        (см. FED-05).
+        Валидирует запрос, ищет среди разрешённых к выдаче правил точное совпадение
+        по `symptom_type`/`corner_phase`/`stint_moment` и членство `car`/`track` в
+        `applicability`. Возвращает не больше 3 рекомендаций, сначала — совпавшие по
+        `stint_moment`. Никогда не возвращает правило со статусом, отличным от
+        «разрешено к выдаче» (FED-05).
       operationId: createRecommendation
       security: []
       requestBody:
@@ -74,7 +80,12 @@ paths:
               oversteerOnExit:
                 summary: Избыточная поворачиваемость на выходе из поворота
                 value:
-                  symptom: "на выходе из поворота машину уводит в избыточную поворачиваемость"
+                  car: "NASCAR Cup Series Next Gen (Gen 7)"
+                  track: "<овал из FED-02>"
+                  symptom_type: oversteer
+                  corner_phase: exit
+                  stint_moment: after_laps
+                  comment: "После 5 кругов зад срывает на выходе из 3–4, приходится раньше сбрасывать газ"
       responses:
         '200':
           description: Запрос обработан — совпадение найдено либо нет
@@ -89,6 +100,7 @@ paths:
                   summary: Найдено совпадение
                   value:
                     status: match
+                    request_id: "6f1c2a9e-3b7d-4c11-9a0e-2d5b8f7c4e10"
                     recommendations:
                       - rule_id: "R-001"
                         parameter: "давление задних шин"
@@ -101,6 +113,7 @@ paths:
                   summary: Совпадений нет
                   value:
                     status: no_match
+                    request_id: "0a8d4e21-7c5f-4b3e-8e19-6b2f1d9c3a77"
                     message: "Подходящее правило не найдено. Попробуйте описать жалобу точнее."
         '400':
           description: Ошибка валидации запроса
@@ -112,9 +125,10 @@ paths:
                 status: error
                 error:
                   code: validation_error
-                  message: "Поле symptom обязательно и должно содержать от 3 до 500 символов"
+                  message: "Проверьте заполнение полей"
                   fields:
-                    symptom: "обязательное поле"
+                    corner_phase: "обязательное поле"
+                    comment: "должен содержать от 3 до 500 символов"
         '500':
           description: Внутренняя ошибка сервера
           content:
@@ -126,6 +140,89 @@ paths:
                 error:
                   code: internal_error
                   message: "Внутренняя ошибка сервера, попробуйте повторить запрос позже"
+
+  /api/v1/recommendations/{request_id}:
+    get:
+      tags: [Recommendations]
+      summary: Повторно получить сохранённый запрос и его результат
+      description: |
+        Решает вопрос 3 ALE-03: пилот возвращается по сохранённой ссылке
+        (`/feedback/{request_id}?rule_id=...`) после заезда, без опоры на localStorage.
+      operationId: getRecommendationByRequestId
+      security: []
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Найден, тот же формат, что у POST
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/MatchResponse'
+                  - $ref: '#/components/schemas/NoMatchResponse'
+        '404':
+          description: request_id не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                error:
+                  code: not_found
+                  message: "Запрос не найден"
+
+  /api/v1/feedback:
+    post:
+      tags: [Feedback]
+      summary: Сохранить отзыв пилота о применённой рекомендации
+      description: |
+        Один отзыв — одна применённая рекомендация. `request_id` и `rule_id`
+        подставляет frontend из ответа `recommendations`, пилот их не вводит (ALE-04).
+      operationId: createFeedback
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+            examples:
+              applied:
+                summary: Применил как написано, стало лучше
+                value:
+                  request_id: "6f1c2a9e-3b7d-4c11-9a0e-2d5b8f7c4e10"
+                  rule_id: "R-001"
+                  applied: as_written
+                  symptom_result: weaker
+                  new_problem: false
+                  keep_change: yes
+                  clarity: 4
+      responses:
+        '201':
+          description: Отзыв сохранён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackCreatedResponse'
+        '400':
+          description: Ошибка валидации — не заполнено обязательное/условное поле, неизвестный request_id, либо rule_id не из этого запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
@@ -139,20 +236,38 @@ components:
 
     RecommendationRequest:
       type: object
-      required: [symptom]
+      required: [car, track, symptom_type, corner_phase, comment]
       properties:
-        symptom:
+        car:
+          type: string
+          description: Машина из FED-02; в MVP одно значение.
+          example: "NASCAR Cup Series Next Gen (Gen 7)"
+        track:
+          type: string
+          description: Овал из списка FED-02.
+        symptom_type:
+          type: string
+          enum: [understeer, oversteer]
+        corner_phase:
+          type: string
+          enum: [entry, mid, exit]
+        stint_moment:
+          type: string
+          enum: [from_start, after_laps]
+          nullable: true
+          description: Не передано = подходит любой момент.
+        comment:
           type: string
           minLength: 3
           maxLength: 500
           description: >
-            Жалоба пилота на поведение машины в свободной форме. Участок трассы и фаза
-            поворота указываются внутри текста, отдельного поля под них в MVP нет.
-          example: "на выходе из поворота машину уводит в избыточную поворачиваемость"
+            Проблема своими словами. Не участвует в поиске правила — сохраняется для
+            ручного анализа (кандидаты в новые правила).
+          example: "После 5 кругов зад срывает на выходе из 3–4, приходится раньше сбрасывать газ"
 
     Recommendation:
       type: object
-      required: [rule_id, parameter, direction, change_description, expected_effect]
+      required: [rule_id, parameter, direction, change_description, expected_effect, limitations, basis]
       properties:
         rule_id:
           type: string
@@ -160,7 +275,7 @@ components:
           example: "R-001"
         parameter:
           type: string
-          description: Каноническое имя параметра сетапа (единый словарь, VAR-02).
+          description: Каноническое русское имя параметра (словарь VAR-02).
           example: "давление задних шин"
         direction:
           type: string
@@ -172,33 +287,97 @@ components:
           type: string
         limitations:
           type: string
-          nullable: true
         basis:
           type: string
-          nullable: true
           description: Источник/основание правила (каталог источников — VAR-01).
 
     MatchResponse:
       type: object
-      required: [status, recommendations]
+      required: [status, request_id, recommendations]
       properties:
         status:
           type: string
           enum: [match]
+        request_id:
+          type: string
+          format: uuid
         recommendations:
           type: array
           minItems: 1
+          maxItems: 3
           items:
             $ref: '#/components/schemas/Recommendation'
 
     NoMatchResponse:
       type: object
-      required: [status, message]
+      required: [status, request_id, message]
       properties:
         status:
           type: string
           enum: [no_match]
+        request_id:
+          type: string
+          format: uuid
         message:
+          type: string
+
+    FeedbackRequest:
+      type: object
+      required: [request_id, rule_id, applied, clarity]
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        rule_id:
+          type: string
+        applied:
+          type: string
+          enum: [as_written, other_value, not_applied]
+        applied_value:
+          type: string
+          maxLength: 200
+          description: Обязательно, если applied = other_value.
+        not_applied_reason:
+          type: string
+          enum: [unclear, no_trust, at_limit, no_time, other]
+          description: Обязательно, если applied = not_applied.
+        symptom_result:
+          type: string
+          enum: [gone, weaker, same, stronger]
+          description: Обязательно, если applied != not_applied.
+        new_problem:
+          type: boolean
+          description: Обязательно, если applied != not_applied.
+        new_problem_text:
+          type: string
+          maxLength: 500
+          description: Обязательно, если new_problem = true.
+        keep_change:
+          type: string
+          enum: [yes, reverted, undecided]
+          description: Обязательно, если applied != not_applied.
+        clarity:
+          type: integer
+          minimum: 1
+          maximum: 5
+        unclear_text:
+          type: string
+          maxLength: 500
+        same_conditions:
+          type: string
+          enum: [yes, "no", unknown]
+        conditions_diff:
+          type: string
+          maxLength: 500
+
+    FeedbackCreatedResponse:
+      type: object
+      required: [status, feedback_id]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        feedback_id:
           type: string
 
     ErrorResponse:
@@ -214,7 +393,7 @@ components:
           properties:
             code:
               type: string
-              enum: [validation_error, internal_error]
+              enum: [validation_error, internal_error, not_found]
             message:
               type: string
             fields:

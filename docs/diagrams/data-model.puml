@@ -1,5 +1,5 @@
 @startuml data-model
-title Схема данных SQLite — parameters и rules
+title Схема данных SQLite v2 — parameters, rules, requests, feedback
 
 entity "parameters" as parameters {
   * id : integer <<PK>>
@@ -11,24 +11,78 @@ entity "parameters" as parameters {
 }
 
 entity "rules" as rules {
-  * id : integer <<PK>>
+  * id : string <<PK>>
   --
-  symptom_condition : string
+  symptom_type : string
+  corner_phase : string
+  stint_moment : string <<nullable>>
   * parameter_id : integer <<FK>>
   direction : string
-  effect : string
+  change_description : string
+  expected_effect : string
   limitations : string
-  applicability : string
+  applicability_car : string
+  applicability_track : string
   status : string
   basis : string
 }
 
+entity "requests" as requests {
+  * id : string <<PK, UUID>>
+  --
+  car : string
+  track : string
+  symptom_type : string
+  corner_phase : string
+  stint_moment : string <<nullable>>
+  comment : string
+  outcome : string
+  matched_rule_ids : string
+  created_at : datetime
+}
+
+entity "feedback" as feedback {
+  * id : integer <<PK>>
+  --
+  * request_id : string <<FK>>
+  rule_id : string
+  applied : string
+  applied_value : string <<nullable>>
+  not_applied_reason : string <<nullable>>
+  symptom_result : string <<nullable>>
+  new_problem : boolean <<nullable>>
+  new_problem_text : string <<nullable>>
+  keep_change : string <<nullable>>
+  clarity : integer
+  unclear_text : string <<nullable>>
+  same_conditions : string <<nullable>>
+  conditions_diff : string <<nullable>>
+  created_at : datetime
+}
+
 rules }o--|| parameters : parameter_id
+feedback }o--|| requests : request_id
 
 note bottom of rules
   status определяет, попадёт ли
   правило в выборку backend —
   см. FED-05 и api-contract.md.
+  applicability_car/track — поиск
+  по членству в списке; пустой
+  список = ни одно значение не
+  подходит, не wildcard.
+end note
+
+note bottom of requests
+  Пишется backend'ом на каждый
+  валидный POST /recommendations.
+  outcome = match | no_match.
+end note
+
+note bottom of feedback
+  Пишется на POST /feedback.
+  rule_id должен быть среди
+  matched_rule_ids запроса.
 end note
 
 @enduml
