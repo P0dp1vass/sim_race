@@ -102,13 +102,13 @@ paths:
                     status: match
                     request_id: "6f1c2a9e-3b7d-4c11-9a0e-2d5b8f7c4e10"
                     recommendations:
-                      - rule_id: "R-001"
-                        parameter: "давление задних шин"
+                      - rule_id: "10-P1"
+                        parameter: "Положение рычага заднего стабилизатора"
                         direction: decrease
-                        change_description: "Снизить давление в задних шинах на 1–2 psi"
-                        expected_effect: "Увеличение пятна контакта задней оси, снижение избыточной поворачиваемости на выходе из поворота"
-                        limitations: "Не снижать ниже рекомендованного производителем минимума"
-                        basis: "VAR-01 / проверено FED-05"
+                        change_description: "Переведи rear_arb_arm_position на 1 позицию мягче (например, P4 → P3)."
+                        expected_effect: "Может уменьшить резкость реакции задней оси на выходе."
+                        limitations: "Возможен рост understeer; проверять отдельно от преднатяга."
+                        basis: "SRC-01; SRC-02"
                 no_match:
                   summary: Совпадений нет
                   value:
@@ -198,11 +198,11 @@ paths:
                 summary: Применил как написано, стало лучше
                 value:
                   request_id: "6f1c2a9e-3b7d-4c11-9a0e-2d5b8f7c4e10"
-                  rule_id: "R-001"
+                  rule_id: "10-P1"
                   applied: as_written
                   symptom_result: weaker
                   new_problem: false
-                  keep_change: yes
+                  keep_change: "yes"
                   clarity: 4
       responses:
         '201':
@@ -272,11 +272,13 @@ components:
         rule_id:
           type: string
           description: Идентификатор правила, трассируется до таблицы `rules` в SQLite.
-          example: "R-001"
+          example: "10-P1"
         parameter:
           type: string
-          description: Каноническое русское имя параметра (словарь VAR-02).
-          example: "давление задних шин"
+          description: >
+            Каноническое русское имя параметра (словарь VAR-02). В правиле хранится
+            технический ID (`rear_arb_arm_position`), backend переводит его в русское имя.
+          example: "Положение рычага заднего стабилизатора"
         direction:
           type: string
           enum: [increase, decrease]
@@ -354,7 +356,7 @@ components:
           description: Обязательно, если new_problem = true.
         keep_change:
           type: string
-          enum: [yes, reverted, undecided]
+          enum: ["yes", reverted, undecided]
           description: Обязательно, если applied != not_applied.
         clarity:
           type: integer
@@ -365,7 +367,7 @@ components:
           maxLength: 500
         same_conditions:
           type: string
-          enum: [yes, "no", unknown]
+          enum: ["yes", "no", unknown]
         conditions_diff:
           type: string
           maxLength: 500
